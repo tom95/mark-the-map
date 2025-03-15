@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Berlin Transit Map</title>
+  <link rel="stylesheet" href="thirdparty/leaflet.css" />
+  <style>
+    body,
+    html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+
+    #map {
+      height: 100vh;
+    }
+
+    #control-panel {
+      position: absolute;
+      z-index: 9999;
+      top: 20px;
+      left: 20px;
+      background: white;
+      padding: 10px;
+      border-radius: 5px;
+    }
+
+    #control-panel>input,
+    #control-panel>button,
+    #control-panel>div {
+      margin-bottom: 10px;
+      display: block;
+      width: 100%;
+    }
+
+    .list {
+      max-height: 100px;
+      overflow-y: auto;
+    }
+
+    .list>div {
+      margin-bottom: 5px;
+    }
+
+    .list>div>button {
+      margin-left: 0.5rem;
+    }
+
+    #toggle-dialog {
+      max-width: 60px;
+      position: absolute;
+      right: 0;
+      top: 0;
+    }
+
+    #control-panel.collapsed>div,
+    #control-panel.collapsed>button:not(#toggle-dialog),
+    #control-panel.collapsed>input,
+    #control-panel.collapsed>label {
+      display: none !important;
+    }
+
+    /*https://github.com/petoc/Leaflet.DoubleTouchDragZoom/blob/master/src/leaflet-double-touch-drag-zoom.css*/
+    .leaflet-double-touch {
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+    }
+
+    .leaflet-double-touch-drag {
+      cursor: move;
+      cursor: -webkit-grabbing;
+      cursor: -moz-grabbing;
+      cursor: row-resize;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+  <div id="control-panel">
+    <button id="toggle-dialog">Tog</button>
+
+    <div>
+      <select id="toggle">
+        <option value="circle">Circle</option>
+        <option value="line">Line</option>
+      </select>
+    </div>
+
+    <label for="plus-code">Plus Code:</label>
+    <input type="text" id="plus-code" placeholder="Enter Plus Code" />
+
+    <label class="ui-line" for="plus-code">End Plus Code:</label>
+    <input class="ui-line" type="text" id="end-plus-code" placeholder="Enter Plus Code" />
+
+    <label class="ui-circle" for="radius">Radius (km):</label>
+    <input class="ui-circle" type="number" id="radius" placeholder="Enter radius" />
+    <div>
+      <label for="invert">
+        <input type="checkbox" id="invert" /> Invert</label>
+    </div>
+    <button id="add-circle">Add</button>
+    <div class="list"></div>
+    <button id="remove-all">Remove all</button>
+  </div>
+
+  <script src="thirdparty/leaflet.js"></script>
+  <script src="thirdparty/turf.min.js"></script>
+  <script src="thirdparty/openlocationcode.min.js"></script>
+  <script src="thirdparty/leaflet-double-touch-drag-zoom.js"></script>
+  <script type="module">
+    import { h, render } from './thirdparty/preact.js';
+
+    const map = L.map("map", {
+      zoomControl: false,
+      attributionControl: false,
+      doubleTouchDragZoom: true,
+      crossOrigin: true,
+    }).setView([52.52, 13.405], 13);
+
+    map.on("click", function (e) {
+      const plusCode = OpenLocationCode.encode(
+        e.latlng.lat,
+        e.latlng.lng,
+        10
+      ).slice(4);
+      const type = document.getElementById("toggle").value;
+      const current = document.getElementById("plus-code").value;
+      document.getElementById(
+        type === "line" && current ? "end-plus-code" : "plus-code"
+      ).value = plusCode;
+      updatePreview();
+    });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      {
+        maxZoom: 19,
+        crossOrigin: true,
+      }
+    ).addTo(map);
+
+    let features = [];
+    let geoJsonLayer = null;
+
+    document.getElementById("remove-all").addEventListener("click", () => {
+      if (!confirm("Are you sure you want to remove all features?")) return;
+      features = [features[0]];
+      document.querySelector(".list").innerHTML = "";
+      updateMap();
+    });
+
+    document.getElementById("toggle-dialog").addEventListener("click", () => {
+      const panel = document.getElementById("control-panel");
+      panel.classList.toggle("collapsed");
+    });
+
+    // FIXME needs to be uploaded and stored in localStorage
+    fetch("berlin.geojson")
+      .then((response) => response.json())
+      .then((data) => {
+        let mergedPolygon = data;
+
+        // invert
+        mergedPolygon = turf.difference(
+          turf.featureCollection([
+            turf.buffer(turf.bboxPolygon(turf.bbox(mergedPolygon)), 5),
+            mergedPolygon.features[0],
+          ])
+        );
+
+        features.push(mergedPolygon);
+
+        let localFeatures = [];
+        try {
+          localFeatures = JSON.parse(localStorage.getItem("features")) ?? [];
+        } catch (e) {
+          alert("Error loading features from local storage: " + e.toString());
+        }
+        for (const f of localFeatures) {
+          if (f[0] === "addLine") addLine(f[1], f[2], f[3]);
+          else if (f[0] === "addCircle") addCircle(f[1], f[2], f[3]);
+        }
+
+        updateMap();
+      });
+    document.getElementById("toggle").addEventListener("change", (e) => {
+      updateUI();
+    });
+
+    function updateUI() {
+      const value = document.getElementById("toggle").value;
+      document.querySelectorAll(".ui-line").forEach((el) => {
+        el.style.display = value === "line" ? "block" : "none";
+      });
+      document.querySelectorAll(".ui-circle").forEach((el) => {
+        el.style.display = value === "circle" ? "block" : "none";
+      });
+    }
+    updateUI();
+
+    document.getElementById("plus-code").addEventListener("click", () => {
+      document.getElementById("plus-code").value = "";
+      updatePreview();
+    });
+    document.getElementById("end-plus-code").addEventListener("click", () => {
+      document.getElementById("end-plus-code").value = "";
+      updatePreview();
+    });
+
+    document
+      .getElementById("plus-code")
+      .addEventListener("change", updatePreview);
+    document
+      .getElementById("end-plus-code")
+      .addEventListener("change", updatePreview);
+    document
+      .getElementById("radius")
+      .addEventListener("input", updatePreview);
+    document
+      .getElementById("invert")
+      .addEventListener("change", updatePreview);
+
+    function buildCircleFeature(plusCode, radius, invert) {
+      let decoded;
+      try {
+        decoded = OpenLocationCode.decode("9F4M" + plusCode);
+      } catch (error) {
+        alert("Invalid Plus Code:" + error.toString());
+      }
+
+      const lat = decoded.latitudeCenter;
+      const lng = decoded.longitudeCenter;
+      let circle = turf.circle([lng, lat], radius / 1000, {
+        steps: 64,
+        units: "kilometers",
+      });
+
+      if (invert) {
+        circle = turf.difference(
+          turf.featureCollection([
+            turf.bboxPolygon(turf.bbox(currentPolygon())),
+            circle,
+          ])
+        );
+      }
+
+      circle.action = ["addCircle", plusCode, radius, invert];
+
+      return circle;
+    }
+
+    function addCircle(plusCode, radius, invert) {
+      const circle = buildCircleFeature(plusCode, radius);
+      features.push(circle);
+
+      const list = document.createElement("div");
+      list.innerHTML = `${invert ? "[I] " : ""}${plusCode} - ${radius}m`;
+      const del = document.createElement("button");
+      del.innerText = "Delete";
+      del.addEventListener("click", () => {
+        list.remove();
+        features = features.filter((f) => f !== circle);
+        updateMap();
+      });
+      list.addEventListener("click", () => {
+        document.getElementById("plus-code").value = plusCode;
+        document.getElementById("radius").value = radius / 1000;
+        document.getElementById("toggle").value = "circle";
+        document.getElementById("invert").checked = invert;
+        updateUI();
+        updatePreview();
+      });
+      list.appendChild(del);
+      document.querySelector(".list").appendChild(list);
+
+      updateMap();
+    }
+
+    function norm(vec) {
+      const len = Math.sqrt(vec[0] * vec[0] + vec[1] * vec[1]);
+      return [vec[0] / len, vec[1] / len];
+    }
+
+    function buildLineFeature(plusCode, endPlusCode, invert) {
+      let decoded;
+      try {
+        decoded = OpenLocationCode.decode("9F4M" + plusCode);
+      } catch (error) {
+        alert("Invalid Plus Code:" + error.toString());
+      }
+
+      let decodedEnd;
+      try {
+        decodedEnd = OpenLocationCode.decode("9F4M" + endPlusCode);
+      } catch (error) {
+        alert("Invalid End Plus Code:" + error.toString());
+      }
+
+      const lat = decoded.latitudeCenter;
+      const lng = decoded.longitudeCenter;
+      const latEnd = decodedEnd.latitudeCenter;
+      const lngEnd = decodedEnd.longitudeCenter;
+
+      // start and end form a vector. we want the area "under" the start point, meaning the area underneath the vector rotated 90 degrees
+      const factor = invert ? -1 : 1;
+      const size = [0.3, 0.7 * factor];
+      const vec = norm([lngEnd - lng, latEnd - lat]);
+      const rotatedVec = [-vec[1] * size[0], vec[0] * size[0]];
+      const base = [lng - vec[0] * size[1], lat - vec[1] * size[1]];
+      const bottomLeft = [base[0] + rotatedVec[0], base[1] + rotatedVec[1]];
+      const bottomRight = [base[0] - rotatedVec[0], base[1] - rotatedVec[1]];
+      const topLeft = [lng + rotatedVec[0], lat + rotatedVec[1]];
+      const topRight = [lng - rotatedVec[0], lat - rotatedVec[1]];
+
+      const area = turf.polygon([
+        [topLeft, topRight, bottomRight, bottomLeft, topLeft],
+      ]);
+
+      area.action = ["addLine", plusCode, endPlusCode, invert];
+      return area;
+    }
+
+    function addLine(plusCode, endPlusCode, invert) {
+      const area = buildLineFeature(plusCode, endPlusCode);
+      features.push(area);
+
+      const list = document.createElement("div");
+      list.innerHTML = `${invert ? "[I] " : ""}${plusCode} - ${endPlusCode}`;
+      const del = document.createElement("button");
+      del.innerText = "Delete";
+      del.addEventListener("click", () => {
+        list.remove();
+        features = features.filter((f) => f !== area);
+        updateMap();
+      });
+      list.addEventListener("click", () => {
+        document.getElementById("plus-code").value = plusCode;
+        document.getElementById("end-plus-code").value = endPlusCode;
+        document.getElementById("toggle").value = "line";
+        document.getElementById("invert").checked = invert;
+        updateUI();
+        updatePreview();
+      });
+      list.appendChild(del);
+      document.querySelector(".list").appendChild(list);
+
+      updateMap();
+    }
+
+    function getPreview() {
+      const type = document.getElementById("toggle").value;
+      const plusCode = document
+        .getElementById("plus-code")
+        .value.split(" ")[0];
+      const endPlusCode = document
+        .getElementById("end-plus-code")
+        .value.split(" ")[0];
+      const radius =
+        parseFloat(document.getElementById("radius").value) * 1000;
+
+      if (type === "circle" && (!plusCode || isNaN(radius))) {
+        return;
+      } else if (type === "line" && (!plusCode || !endPlusCode)) {
+        return;
+      }
+
+      const invert = document.getElementById("invert").checked;
+
+      if (type === "line") {
+        return buildLineFeature(plusCode, endPlusCode, invert);
+      } else {
+        return buildCircleFeature(plusCode, radius, invert);
+      }
+    }
+
+    const icon = L.icon({
+      iconSize: [16, 16],
+      iconAnchor: [8, 8]
+    });
+    const marker = L.marker([0, 0], { icon: icon }).addTo(map);
+    const accuracyCircle = L.circle([0, 0], { radius: 0 }).addTo(map);
+    map.locate({ watch: true, enableHighAccuracy: true });
+    map.on('locationfound', function (e) {
+      marker.setLatLng(e.latlng);
+      accuracyCircle.setLatLng(e.latlng).setRadius(e.accuracy);
+    });
+
+    document.getElementById("add-circle").addEventListener("click", () => {
+      const type = document.getElementById("toggle").value;
+
+      const plusCode = document
+        .getElementById("plus-code")
+        .value.split(" ")[0];
+      const endPlusCode = document
+        .getElementById("end-plus-code")
+        .value.split(" ")[0];
+      const radius =
+        parseFloat(document.getElementById("radius").value) * 1000;
+
+      if (type === "circle" && (!plusCode || isNaN(radius))) {
+        alert("Please enter a valid Plus Code and radius.");
+        return;
+      } else if (type === "line" && (!plusCode || !endPlusCode)) {
+        alert("Please enter a valid Plus Code and end Plus Code.");
+        return;
+      }
+
+      const invert = document.getElementById("invert").checked;
+
+      if (type === "line") {
+        addLine(plusCode, endPlusCode, invert);
+      } else {
+        addCircle(plusCode, radius, invert);
+      }
+
+      document.getElementById("plus-code").value = "";
+      document.getElementById("end-plus-code").value = "";
+      updatePreview();
+    });
+
+    function currentPolygon() {
+      return features.length <= 1
+        ? features[0]
+        : turf.union(turf.featureCollection(features));
+    }
+
+    let previewLayer;
+    function updatePreview() {
+      if (previewLayer) {
+        map.removeLayer(previewLayer);
+      }
+
+      const preview = getPreview();
+      if (preview)
+        previewLayer = L.geoJSON(preview, {
+          color: "blue",
+          fillOpacity: 0.3,
+        }).addTo(map);
+    }
+
+    function updateMap() {
+      if (geoJsonLayer) {
+        map.removeLayer(geoJsonLayer);
+      }
+      const mergedPolygon = currentPolygon();
+      if (mergedPolygon) {
+        geoJsonLayer = L.geoJSON(mergedPolygon, {
+          color: "red",
+          fillOpacity: 0.3,
+        }).addTo(map);
+      }
+      localStorage.setItem(
+        "features",
+        JSON.stringify(features.slice(1).map((f) => f.action))
+      );
+    }
+  </script>
+</body>
+
+</html>
