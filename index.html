@@ -148,8 +148,13 @@ let previewLayer;
     let geoJsonLayer = null;
 
 
-    (() => {
-  const mergedPolygon = turf.bboxPolygon([135.60, 34.90, 135.90, 35.10]);
+(() => {
+  const kyotoBox = turf.bboxPolygon([135.60, 34.90, 135.90, 35.10]);
+  const largeFrame = turf.buffer(kyotoBox, 500, { units: "kilometers" });
+  const mergedPolygon = turf.difference(
+    turf.featureCollection([largeFrame, kyotoBox])
+  );
+
   features.push(mergedPolygon);
 
   let localFeatures = [];
