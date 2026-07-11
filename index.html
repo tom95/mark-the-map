@@ -128,7 +128,7 @@ let previewLayer;
         e.latlng.lat,
         e.latlng.lng,
         10
-      ).slice(4);
+      );
       const type = document.getElementById("toggle").value;
       const current = document.getElementById("plus-code").value;
       document.getElementById(
@@ -200,7 +200,7 @@ let previewLayer;
     function buildCircleFeature(plusCode, radius, invert) {
       let decoded;
       try {
-        decoded = OpenLocationCode.decode("9F4M" + plusCode);
+        decoded = OpenLocationCode.decode(plusCode);
       } catch (error) {
         alert("Invalid Plus Code:" + error.toString());
       }
@@ -261,14 +261,14 @@ let previewLayer;
     function buildLineFeature(plusCode, endPlusCode, invert) {
       let decoded;
       try {
-        decoded = OpenLocationCode.decode("9F4M" + plusCode);
+        decoded = OpenLocationCode.decode(plusCode);
       } catch (error) {
         alert("Invalid Plus Code:" + error.toString());
       }
 
       let decodedEnd;
       try {
-        decodedEnd = OpenLocationCode.decode("9F4M" + endPlusCode);
+        decodedEnd = OpenLocationCode.decode(endPlusCode);
       } catch (error) {
         alert("Invalid End Plus Code:" + error.toString());
       }
