@@ -121,7 +121,7 @@
       attributionControl: false,
       doubleTouchDragZoom: true,
       crossOrigin: true,
-    }).setView([52.52, 13.405], 13);
+    }).setView([35.0116, 135.7681], 13);
 
     map.on("click", function (e) {
       const plusCode = OpenLocationCode.encode(
@@ -159,35 +159,7 @@
       panel.classList.toggle("collapsed");
     });
 
-    // FIXME needs to be uploaded and stored in localStorage
-    fetch("berlin.geojson")
-      .then((response) => response.json())
-      .then((data) => {
-        let mergedPolygon = data;
-
-        // invert
-        mergedPolygon = turf.difference(
-          turf.featureCollection([
-            turf.buffer(turf.bboxPolygon(turf.bbox(mergedPolygon)), 5),
-            mergedPolygon.features[0],
-          ])
-        );
-
-        features.push(mergedPolygon);
-
-        let localFeatures = [];
-        try {
-          localFeatures = JSON.parse(localStorage.getItem("features")) ?? [];
-        } catch (e) {
-          alert("Error loading features from local storage: " + e.toString());
-        }
-        for (const f of localFeatures) {
-          if (f[0] === "addLine") addLine(f[1], f[2], f[3]);
-          else if (f[0] === "addCircle") addCircle(f[1], f[2], f[3]);
-        }
-
-        updateMap();
-      });
+ 
     document.getElementById("toggle").addEventListener("change", (e) => {
       updateUI();
     });
