@@ -115,7 +115,7 @@
   <script src="thirdparty/leaflet-double-touch-drag-zoom.js"></script>
   <script type="module">
     import { h, render } from './thirdparty/preact.js';
-
+let previewLayer;
     const map = L.map("map", {
       zoomControl: false,
       attributionControl: false,
@@ -401,7 +401,7 @@
         : turf.union(turf.featureCollection(features));
     }
 
-    let previewLayer;
+    
     function updatePreview() {
       if (previewLayer) {
         map.removeLayer(previewLayer);
