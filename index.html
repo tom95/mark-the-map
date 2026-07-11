@@ -255,7 +255,7 @@ let previewLayer;
     }
 
     function addCircle(plusCode, radius, invert) {
-      const circle = buildCircleFeature(plusCode, radius);
+      const circle = buildCircleFeature(plusCode, radius, invert);
       features.push(circle);
 
       const list = document.createElement("div");
@@ -326,7 +326,7 @@ let previewLayer;
     }
 
     function addLine(plusCode, endPlusCode, invert) {
-      const area = buildLineFeature(plusCode, endPlusCode);
+      const area = buildLineFeature(plusCode, endPlusCode, invert);
       features.push(area);
 
       const list = document.createElement("div");
