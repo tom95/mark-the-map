@@ -147,6 +147,25 @@ let previewLayer;
     let features = [];
     let geoJsonLayer = null;
 
+
+    (() => {
+  const mergedPolygon = turf.bboxPolygon([135.60, 34.90, 135.90, 35.10]);
+  features.push(mergedPolygon);
+
+  let localFeatures = [];
+  try {
+    localFeatures = JSON.parse(localStorage.getItem("features")) ?? [];
+  } catch (e) {
+    alert("Error loading features from local storage: " + e.toString());
+  }
+  for (const f of localFeatures) {
+    if (f[0] === "addLine") addLine(f[1], f[2], f[3]);
+    else if (f[0] === "addCircle") addCircle(f[1], f[2], f[3]);
+  }
+
+  updateMap();
+})();
+
     document.getElementById("remove-all").addEventListener("click", () => {
       if (!confirm("Are you sure you want to remove all features?")) return;
       features = [features[0]];
