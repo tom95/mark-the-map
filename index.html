@@ -135,7 +135,7 @@ let previewLayer;
         e.latlng.lat,
         e.latlng.lng,
         10
-      );
+      ).slice(4);
       const type = document.getElementById("toggle").value;
       const current = document.getElementById("plus-code").value;
       document.getElementById(
@@ -225,10 +225,22 @@ let previewLayer;
       .getElementById("invert")
       .addEventListener("change", updatePreview);
 
+    // Accepts full plus codes as well as Google Maps short codes
+    // (e.g. "XPWQ+7RQ Kyoto"), recovering the latter relative to the
+    // current map center.
+    function decodePlusCode(plusCode) {
+      let code = plusCode.trim();
+      if (OpenLocationCode.isShort(code)) {
+        const center = map.getCenter();
+        code = OpenLocationCode.recoverNearest(code, center.lat, center.lng);
+      }
+      return OpenLocationCode.decode(code);
+    }
+
     function buildCircleFeature(plusCode, radius, invert) {
       let decoded;
       try {
-        decoded = OpenLocationCode.decode(plusCode);
+        decoded = decodePlusCode(plusCode);
       } catch (error) {
         alert("Invalid Plus Code:" + error.toString());
       }
@@ -289,14 +301,14 @@ let previewLayer;
     function buildLineFeature(plusCode, endPlusCode, invert) {
       let decoded;
       try {
-        decoded = OpenLocationCode.decode(plusCode);
+        decoded = decodePlusCode(plusCode);
       } catch (error) {
         alert("Invalid Plus Code:" + error.toString());
       }
 
       let decodedEnd;
       try {
-        decodedEnd = OpenLocationCode.decode(endPlusCode);
+        decodedEnd = decodePlusCode(endPlusCode);
       } catch (error) {
         alert("Invalid End Plus Code:" + error.toString());
       }
