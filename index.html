@@ -150,10 +150,7 @@ let previewLayer;
 
 (() => {
   const kyotoBox = turf.bboxPolygon([135.60, 34.90, 135.90, 35.10]);
-  const largeFrame = turf.buffer(kyotoBox, 500, { units: "kilometers" });
-  const mergedPolygon = turf.difference(
-    turf.featureCollection([largeFrame, kyotoBox])
-  );
+  const mergedPolygon = turf.mask(kyotoBox);
 
   features.push(mergedPolygon);
 
